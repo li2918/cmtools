@@ -111,6 +111,20 @@
 
   .footer-note { margin-top: 48px; text-align: center; color: var(--muted); font-size: 12px; }
 
+  /* ---------- Pay stub ---------- */
+  .ps-panel {
+    background: var(--hl); border: 1px solid var(--line); border-radius: 8px;
+    padding: 12px 14px; margin-bottom: 28px; font-size: 13px;
+  }
+  .ps-panel .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
+  .ps-panel label { display: flex; align-items: center; gap: 6px; color: #555; }
+  .ps-panel input.inp { width: 130px; font-weight: 600; font-size: 15px; }
+  .ps-hint { color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.5; }
+  .ps-warn { color: #c0392b; font-size: 12px; margin-top: 6px; font-weight: 600; }
+  .emp-addr { font-size: 13px; color: #555; margin-top: 4px; line-height: 1.5; }
+  table.items.ps-ded { margin-top: 28px; }
+  table.items td.qty.basis { width: 110px; }
+
   /* ---------- Message tool ---------- */
   .msg-sheet h2 { margin: 0 0 4px; font-size: 22px; font-weight: 600; color: var(--ink); }
   .msg-sheet .sub { color: var(--muted); font-size: 13px; margin-bottom: 24px; }
@@ -149,24 +163,26 @@
 <div class="toolbar no-print">
   <div class="tabs">
     <button class="tab active" data-tab="invoice" onclick="switchTab('invoice')">🧾 开票工具</button>
+    <button class="tab" data-tab="paystub" onclick="switchTab('paystub')">💵 工资单</button>
     <button class="tab" data-tab="message" onclick="switchTab('message')">💬 证书通知</button>
   </div>
-  <span class="tax-toggle invoice-only">
+  <span class="tax-toggle" data-tabs="invoice">
     <label><input type="checkbox" id="taxOn"> 含税</label>
     <input class="inp" id="taxRate" style="width:48px" value="0" inputmode="decimal">%
   </span>
-  <span class="tax-toggle invoice-only">币种
+  <span class="tax-toggle" data-tabs="invoice paystub">币种
     <select class="inp" id="currency"></select>
   </span>
-  <span class="tax-toggle invoice-only">语言
+  <span class="tax-toggle" data-tabs="invoice paystub">语言
     <select class="inp" id="lang">
       <option value="both">中英双语</option>
       <option value="zh">中文</option>
       <option value="en">English</option>
     </select>
   </span>
-  <button class="invoice-only" onclick="resetInvoice()">新建</button>
-  <button class="invoice-only primary" onclick="window.print()">打印 / 导出 PDF</button>
+  <button data-tabs="invoice" onclick="resetInvoice()">新建</button>
+  <button data-tabs="paystub" onclick="resetPaystub()">新建</button>
+  <button class="primary" data-tabs="invoice paystub" onclick="window.print()">打印 / 导出 PDF</button>
 </div>
 
 <div class="sheet" id="sheet">
@@ -234,6 +250,108 @@
   <div class="footer-note" contenteditable data-i18n="thanks">Thank you for your business!</div>
 </div>
 
+<!-- ================= Pay stub ================= -->
+<div class="sheet" id="paystubSheet" style="display:none">
+
+  <div class="ps-panel no-print">
+    <div class="row">
+      <label>计算方式
+        <select class="inp" id="psMode">
+          <option value="net">反推：输入实发工资，推算应发与扣除</option>
+          <option value="gross">正算：输入应发工资，计算扣除与实发</option>
+        </select>
+      </label>
+      <label><span id="psAmountLabel">实发工资 Net Pay</span>
+        <input class="inp" id="psAmount" inputmode="decimal" value="0">
+      </label>
+    </div>
+    <div class="ps-hint">扣除项在下方表格中直接编辑：比率列填 “6.2%” 表示按应发工资的百分比，填 “50” 表示固定金额。联邦 / 州所得税为预扣估算，请按实际有效税率填写。</div>
+    <div class="ps-warn" id="psWarn" style="display:none">百分比扣除合计已达到或超过 100%，无法反推应发工资。</div>
+  </div>
+
+  <!-- Top -->
+  <div class="top">
+    <div class="logo-area">
+      <div class="logo-box empty" title="点击更换 Logo"><span>点击上传 Logo</span></div>
+    </div>
+    <div class="top-right">
+      <div class="doctitle" data-i18n="payStub">PAY STUB</div>
+      <div class="company">
+        <div class="strong" contenteditable data-save="coName">Coding Mind</div>
+        <div contenteditable data-save="coAddr">920 Roosevelt<br>Suite 200<br>Irvine, California 92620<br>United States</div>
+        <div contenteditable data-save="coContact" style="margin-top:12px">(949) 236-7896<br>codingmind.com</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Employee + meta -->
+  <div class="mid">
+    <div class="billto">
+      <div class="label" data-i18n="employee">EMPLOYEE</div>
+      <div class="name" contenteditable data-nosave id="psEmpName">员工姓名</div>
+      <div class="emp-addr" contenteditable data-nosave id="psEmpAddr">地址（可选）</div>
+    </div>
+    <div class="meta">
+      <table>
+        <tr><td class="k" data-i18n="stubNo" data-colon>Stub Number:</td><td class="v" contenteditable data-nosave id="psNo">0001</td></tr>
+        <tr><td class="k" data-i18n="payPeriod" data-colon>Pay Period:</td><td class="v" contenteditable data-nosave id="psPeriod"></td></tr>
+        <tr><td class="k" data-i18n="payDate" data-colon>Pay Date:</td><td class="v" contenteditable data-nosave id="psPayDate"></td></tr>
+        <tr><td class="k" data-i18n="payFreq" data-colon>Pay Frequency:</td><td class="v" contenteditable data-save="psFreq">Monthly 月薪</td></tr>
+        <tr class="due"><td class="k"><span class="nplabel"></span> (<span class="curcode">USD</span>):</td><td class="v" id="psMetaNet">$0.00</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <!-- Earnings -->
+  <table class="items">
+    <thead>
+      <tr>
+        <th class="desc" data-i18n="earnings">Earnings</th>
+        <th class="qty" data-i18n="hours">Hours</th>
+        <th class="price" data-i18n="rate">Rate</th>
+        <th class="amount" data-i18n="amount">Amount</th>
+        <th class="no-print" style="width:24px;background:#fff"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="desc" contenteditable data-save="psEarnName">Regular Pay 基本工资</td>
+        <td class="qty" contenteditable id="psHoursCell" title="可选：填写工时后自动计算时薪"></td>
+        <td class="price" id="psRateCell">—</td>
+        <td class="amount" id="psGrossCell">$0.00</td>
+        <td class="no-print"></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <!-- Deductions -->
+  <table class="items ps-ded">
+    <thead>
+      <tr>
+        <th class="desc" data-i18n="deductions">Deductions</th>
+        <th class="qty" data-i18n="basis">Rate</th>
+        <th class="amount" data-i18n="amount">Amount</th>
+        <th class="no-print" style="width:24px;background:#fff"></th>
+      </tr>
+    </thead>
+    <tbody id="psDedBody"></tbody>
+  </table>
+  <button class="add-row no-print" onclick="psAddDeduction()">+ 添加扣除项 Add deduction</button>
+
+  <!-- Summary -->
+  <div class="totals">
+    <div class="totals-inner">
+      <table>
+        <tr><td class="tl" data-i18n="grossPay" data-colon>Gross Pay:</td><td class="tv" id="psGross">$0.00</td></tr>
+        <tr><td class="tl" data-i18n="totalDeductions" data-colon>Total Deductions:</td><td class="tv" id="psDed">$0.00</td></tr>
+        <tr class="due"><td class="tl"><span class="nplabel"></span> (<span class="curcode">USD</span>):</td><td class="tv" id="psNet">$0.00</td></tr>
+      </table>
+    </div>
+  </div>
+
+  <div class="footer-note" contenteditable data-i18n="psNote">Please keep this statement for your records.</div>
+</div>
+
 <!-- ================= Message tool ================= -->
 <div class="sheet msg-sheet" id="messageSheet" style="display:none">
   <h2>证书通知消息</h2>
@@ -298,6 +416,22 @@
     tax:        {zh:'税',       en:'Tax'},
     total:      {zh:'合计',     en:'Total'},
     thanks:     {zh:'感谢您的惠顾！', en:'Thank you for your business!'},
+    /* pay stub */
+    payStub:    {zh:'工资单',   en:'PAY STUB'},
+    employee:   {zh:'员工',     en:'EMPLOYEE'},
+    stubNo:     {zh:'工资单编号', en:'Stub Number'},
+    payPeriod:  {zh:'工资周期', en:'Pay Period'},
+    payDate:    {zh:'发薪日期', en:'Pay Date'},
+    payFreq:    {zh:'发薪频率', en:'Pay Frequency'},
+    earnings:   {zh:'收入',     en:'Earnings'},
+    hours:      {zh:'工时',     en:'Hours'},
+    rate:       {zh:'时薪',     en:'Rate'},
+    deductions: {zh:'扣除项',   en:'Deductions'},
+    basis:      {zh:'比率',     en:'Rate'},
+    grossPay:   {zh:'应发工资', en:'Gross Pay'},
+    totalDeductions: {zh:'扣除合计', en:'Total Deductions'},
+    netPay:     {zh:'实发工资', en:'Net Pay'},
+    psNote:     {zh:'请妥善保存本工资单。', en:'Please keep this statement for your records.'},
   };
   function curLang(){ return $('#lang').value || 'both'; }
   function t(key){ const e = I18N[key]; const l = curLang(); return l === 'both' ? (e.zh + ' ' + e.en) : e[l]; }
@@ -306,16 +440,18 @@
       el.textContent = t(el.dataset.i18n) + (el.hasAttribute('data-colon') ? ':' : '');
     });
     document.querySelectorAll('.adlabel').forEach(el => el.textContent = t('amountDue'));
+    document.querySelectorAll('.nplabel').forEach(el => el.textContent = t('netPay'));
     recalc();
+    psRecalc();
   }
 
   /* ---------- Dates (format follows language) ---------- */
   const MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  function todayLong(){
-    const d = new Date();
+  function fmtDate(d){
     if (curLang() === 'zh') return d.getFullYear() + '年' + (d.getMonth()+1) + '月' + d.getDate() + '日';
     return MONTHS[d.getMonth()] + ' ' + d.getDate() + ', ' + d.getFullYear();
   }
+  function todayLong(){ return fmtDate(new Date()); }
 
   /* ---------- Settings persistence ---------- */
   const SETTINGS_KEY = 'invoiceSettings_v5';
@@ -350,11 +486,12 @@
   /* ---------- Logo ---------- */
   function setLogo(dataUrl) {
     window._logoData = dataUrl;
-    const box = $('#logoBox');
-    box.classList.remove('empty');
-    box.innerHTML = '<img src="'+dataUrl+'">';
+    document.querySelectorAll('.logo-box').forEach(box => {
+      box.classList.remove('empty');
+      box.innerHTML = '<img src="'+dataUrl+'">';
+    });
   }
-  $('#logoBox').addEventListener('click', () => $('#logoInput').click());
+  document.querySelectorAll('.logo-box').forEach(box => box.addEventListener('click', () => $('#logoInput').click()));
   $('#logoInput').addEventListener('change', e => {
     const f = e.target.files[0]; if (!f) return;
     const r = new FileReader();
@@ -441,20 +578,150 @@
   /* ---------- Events ---------- */
   document.addEventListener('input', e => {
     if (e.target.closest('#itemsBody') || e.target.closest('.payrow') || ['taxRate','taxOn','currency'].includes(e.target.id)) recalc();
-    if (e.target.closest('[data-save]') && e.target.dataset.nosave === undefined) saveSettings();
+    if (e.target.closest('#psDedBody') || e.target.closest('#psHoursCell') || ['psAmount','currency'].includes(e.target.id)) psRecalc();
+    if (e.target.closest('#psDedBody')) psSave();
+    const saved = e.target.closest('[data-save]');
+    if (saved && saved.dataset.nosave === undefined) {
+      // The same field (e.g. company name) appears on several sheets: keep the copies in sync.
+      document.querySelectorAll('[data-save="'+saved.dataset.save+'"]').forEach(o => { if (o !== saved) o.innerHTML = saved.innerHTML; });
+      saveSettings();
+    }
   });
   document.addEventListener('change', e => {
-    if (['taxOn','currency'].includes(e.target.id)) { recalc(); saveSettings(); }
+    if (['taxOn','currency'].includes(e.target.id)) { recalc(); psRecalc(); saveSettings(); }
     if (e.target.id === 'lang') { applyLang(); saveSettings(); }
+    if (e.target.id === 'psMode') { psUpdateModeLabel(); psRecalc(); psSave(); }
   });
 
   /* ---------- Tabs ---------- */
   function switchTab(name) {
     document.querySelectorAll('.tab').forEach(b => b.classList.toggle('active', b.dataset.tab === name));
-    document.querySelectorAll('.invoice-only').forEach(el => el.style.display = name === 'invoice' ? '' : 'none');
+    document.querySelectorAll('[data-tabs]').forEach(el => el.style.display = el.dataset.tabs.split(' ').includes(name) ? '' : 'none');
     $('#sheet').style.display = name === 'invoice' ? '' : 'none';
+    $('#paystubSheet').style.display = name === 'paystub' ? '' : 'none';
     $('#messageSheet').style.display = name === 'message' ? '' : 'none';
     window.scrollTo(0, 0);
+  }
+
+  /* ---------- Pay stub ---------- */
+  const PS_KEY = 'paystubSettings_v1';
+  // Defaults for a California employer. Federal / state income tax are flat effective-rate estimates; edit as needed.
+  const PS_DEFAULT_DEDUCTIONS = [
+    ['Federal Income Tax 联邦所得税', '10%'],
+    ['Social Security 社会保障税', '6.2%'],
+    ['Medicare 医疗保险税', '1.45%'],
+    ['CA State Income Tax 加州所得税', '4%'],
+    ['CA SDI 加州残障保险', '1.3%'],
+  ];
+  const r2 = n => Math.round(n * 100) / 100;
+  const sum = a => a.reduce((x, y) => x + y, 0);
+
+  // "6.2%" → percentage of gross; "50" → fixed amount
+  function parseBasis(text) {
+    const s = (text || '').trim();
+    const v = num(s);
+    return s.includes('%') ? {pct: v} : {fixed: v};
+  }
+
+  function psAddDeduction(name = '', basis = '0%') {
+    const tr = document.createElement('tr');
+    tr.innerHTML =
+      '<td class="desc" contenteditable>'+name+'</td>'+
+      '<td class="qty basis" contenteditable>'+basis+'</td>'+
+      '<td class="amount">'+money(0)+'</td>'+
+      '<td class="no-print"><button class="del-row" title="删除">✕</button></td>';
+    $('#psDedBody').appendChild(tr);
+    tr.querySelector('.del-row').onclick = () => { tr.remove(); psRecalc(); psSave(); };
+    psRecalc();
+  }
+
+  function psUpdateModeLabel() {
+    $('#psAmountLabel').textContent = $('#psMode').value === 'gross' ? '应发工资 Gross Pay' : '实发工资 Net Pay';
+  }
+
+  function psRecalc() {
+    const mode = $('#psMode').value;
+    const input = r2(num($('#psAmount').value));
+    const rows = [...document.querySelectorAll('#psDedBody tr')].map(tr => ({tr, ...parseBasis(tr.querySelector('.basis').textContent)}));
+    const pctSum = sum(rows.map(r => r.pct || 0));
+    const fixedSum = sum(rows.map(r => r.fixed || 0));
+    const calcDed = g => rows.map(r => r2(r.pct != null ? g * r.pct / 100 : r.fixed));
+
+    let gross, net, amounts, blocked = false;
+    if (mode === 'gross') {
+      gross = input;
+      amounts = calcDed(gross);
+      net = r2(gross - sum(amounts));
+    } else {
+      net = input;
+      if (pctSum >= 100) {
+        blocked = true; gross = 0; amounts = rows.map(() => 0);
+      } else {
+        // Reverse: net = gross − Σ(gross·pct) − Σfixed  ⇒  gross = (net + Σfixed) / (1 − Σpct)
+        gross = r2((net + fixedSum) / (1 - pctSum / 100));
+        amounts = calcDed(gross);
+        // Nudge gross so that, after cent rounding, gross − deductions equals the entered net exactly.
+        for (let i = 0; i < 5; i++) {
+          const diff = r2(net - (gross - sum(amounts)));
+          if (!diff) break;
+          gross = r2(gross + diff);
+          amounts = calcDed(gross);
+        }
+        const diff = r2(net - (gross - sum(amounts)));
+        if (diff && rows.length) {
+          const k = Math.max(0, rows.findIndex(r => r.pct != null));
+          amounts[k] = r2(amounts[k] - diff);
+        }
+      }
+    }
+
+    rows.forEach((r, i) => r.tr.querySelector('.amount').textContent = money(amounts[i]));
+    const hours = num($('#psHoursCell').textContent);
+    $('#psRateCell').textContent = hours > 0 ? money(gross / hours) : '—';
+    $('#psGrossCell').textContent = money(gross);
+    $('#psGross').textContent = money(gross);
+    $('#psDed').textContent = money(r2(sum(amounts)));
+    $('#psNet').textContent = money(net);
+    $('#psMetaNet').textContent = money(net);
+    $('#psWarn').style.display = blocked ? '' : 'none';
+    document.querySelectorAll('.curcode').forEach(el => el.textContent = cur().code);
+  }
+
+  function psSave() {
+    const s = {
+      mode: $('#psMode').value,
+      deductions: [...document.querySelectorAll('#psDedBody tr')].map(tr => [
+        tr.querySelector('.desc').innerHTML, tr.querySelector('.basis').textContent,
+      ]),
+    };
+    localStorage.setItem(PS_KEY, JSON.stringify(s));
+  }
+  function psLoad() {
+    let s = {};
+    try { s = JSON.parse(localStorage.getItem(PS_KEY)) || {}; } catch(e){}
+    if (s.mode) $('#psMode').value = s.mode;
+    (Array.isArray(s.deductions) && s.deductions.length ? s.deductions : PS_DEFAULT_DEDUCTIONS)
+      .forEach(([n, b]) => psAddDeduction(n, b));
+    psUpdateModeLabel();
+  }
+  function psDefaultDates() {
+    const now = new Date();
+    const first = new Date(now.getFullYear(), now.getMonth(), 1);
+    $('#psPeriod').textContent = fmtDate(first) + ' – ' + fmtDate(now);
+    $('#psPayDate').textContent = fmtDate(now);
+  }
+  function resetPaystub() {
+    if (!confirm('新建一张空白工资单？（公司信息、Logo 与扣除项设置会保留）')) return;
+    const el = $('#psNo');
+    const m = el.textContent.match(/(\d+)\s*$/);
+    if (m) el.textContent = el.textContent.replace(/\d+\s*$/, String(+m[1]+1).padStart(m[1].length,'0'));
+    $('#psEmpName').textContent = '员工姓名';
+    $('#psEmpAddr').textContent = '地址（可选）';
+    $('#psAmount').value = '0';
+    $('#psHoursCell').textContent = '';
+    psDefaultDates();
+    psRecalc();
+    window.scrollTo(0,0);
   }
 
   /* ---------- Message tool ---------- */
@@ -484,12 +751,15 @@
 
   /* ---------- Init ---------- */
   loadSettings();
+  psLoad();
   applyLang();
   $('#invDate').textContent = todayLong();
   $('#dueDate').textContent = todayLong();
+  psDefaultDates();
   addRow('Summer Camp', 1, 0);
   addRow();
   recalc();
+  psRecalc();
 </script>
 </body>
 </html>
