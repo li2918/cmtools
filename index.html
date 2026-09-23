@@ -119,6 +119,8 @@
   .ps-panel .row { display: flex; gap: 16px; flex-wrap: wrap; align-items: center; }
   .ps-panel label { display: flex; align-items: center; gap: 6px; color: #555; }
   .ps-panel input.inp { width: 130px; font-weight: 600; font-size: 15px; }
+  .ps-panel input[type=date].inp { width: auto; font-weight: 400; font-size: 13px; }
+  .ps-panel .row + .row { margin-top: 8px; }
   .ps-hint { color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.5; }
   .ps-warn { color: #c0392b; font-size: 12px; margin-top: 6px; font-weight: 600; }
   .emp-addr { font-size: 13px; color: #555; margin-top: 4px; line-height: 1.5; }
@@ -207,7 +209,7 @@
   <div class="mid">
     <div class="billto">
       <div class="label" data-i18n="billTo">BILL TO</div>
-      <div class="name" contenteditable data-nosave>家长 / 公司名称</div>
+      <div class="name" contenteditable data-nosave data-i18n-default="billToPh">家长 / 公司名称</div>
     </div>
     <div class="meta">
       <table>
@@ -255,6 +257,12 @@
 
   <div class="ps-panel no-print">
     <div class="row">
+      <label>州 State
+        <select class="inp" id="psState">
+          <option value="CA">California 加州</option>
+          <option value="IN">Indiana 印第安纳</option>
+        </select>
+      </label>
       <label>计算方式
         <select class="inp" id="psMode">
           <option value="net">反推：输入实发工资，推算应发与扣除</option>
@@ -265,7 +273,16 @@
         <input class="inp" id="psAmount" inputmode="decimal" value="0">
       </label>
     </div>
-    <div class="ps-hint">扣除项在下方表格中直接编辑：比率列填 “6.2%” 表示按应发工资的百分比，填 “50” 表示固定金额。联邦 / 州所得税为预扣估算，请按实际有效税率填写。</div>
+    <div class="row">
+      <label>工资周期
+        <input type="date" class="inp" id="psStart"> –
+        <input type="date" class="inp" id="psEnd">
+      </label>
+      <label>发薪日期
+        <input type="date" class="inp" id="psPay">
+      </label>
+    </div>
+    <div class="ps-hint">扣除项在下方表格中直接编辑：比率列填 “6.2%” 表示按应发工资的百分比，填 “50” 表示固定金额。联邦 / 州所得税为预扣估算，请按实际有效税率填写。切换州时会替换州级扣除项，联邦项与自定义项保留。印第安纳州另有县税，税率因居住县不同（约 0.5%–3%），请按实际填写。</div>
     <div class="ps-warn" id="psWarn" style="display:none">百分比扣除合计已达到或超过 100%，无法反推应发工资。</div>
   </div>
 
@@ -288,15 +305,15 @@
   <div class="mid">
     <div class="billto">
       <div class="label" data-i18n="employee">EMPLOYEE</div>
-      <div class="name" contenteditable data-nosave id="psEmpName">员工姓名</div>
-      <div class="emp-addr" contenteditable data-nosave id="psEmpAddr">地址（可选）</div>
+      <div class="name" contenteditable data-nosave id="psEmpName" data-i18n-default="empNamePh">员工姓名</div>
+      <div class="emp-addr" contenteditable data-nosave id="psEmpAddr" data-i18n-default="empAddrPh">地址（可选）</div>
     </div>
     <div class="meta">
       <table>
         <tr><td class="k" data-i18n="stubNo" data-colon>Stub Number:</td><td class="v" contenteditable data-nosave id="psNo">0001</td></tr>
-        <tr><td class="k" data-i18n="payPeriod" data-colon>Pay Period:</td><td class="v" contenteditable data-nosave id="psPeriod"></td></tr>
-        <tr><td class="k" data-i18n="payDate" data-colon>Pay Date:</td><td class="v" contenteditable data-nosave id="psPayDate"></td></tr>
-        <tr><td class="k" data-i18n="payFreq" data-colon>Pay Frequency:</td><td class="v" contenteditable data-save="psFreq">Monthly 月薪</td></tr>
+        <tr><td class="k" data-i18n="payPeriod" data-colon>Pay Period:</td><td class="v" id="psPeriod" title="在上方面板中选择日期"></td></tr>
+        <tr><td class="k" data-i18n="payDate" data-colon>Pay Date:</td><td class="v" id="psPayDate" title="在上方面板中选择日期"></td></tr>
+        <tr><td class="k" data-i18n="payFreq" data-colon>Pay Frequency:</td><td class="v" contenteditable data-save="psFreq" data-i18n-default="monthly">Monthly 月薪</td></tr>
         <tr class="due"><td class="k"><span class="nplabel"></span> (<span class="curcode">USD</span>):</td><td class="v" id="psMetaNet">$0.00</td></tr>
       </table>
     </div>
@@ -315,7 +332,7 @@
     </thead>
     <tbody>
       <tr>
-        <td class="desc" contenteditable data-save="psEarnName">Regular Pay 基本工资</td>
+        <td class="desc" contenteditable data-save="psEarnName" data-i18n-default="regularPay">Regular Pay 基本工资</td>
         <td class="qty" contenteditable id="psHoursCell" title="可选：填写工时后自动计算时薪"></td>
         <td class="price" id="psRateCell">—</td>
         <td class="amount" id="psGrossCell">$0.00</td>
@@ -432,13 +449,34 @@
     totalDeductions: {zh:'扣除合计', en:'Total Deductions'},
     netPay:     {zh:'实发工资', en:'Net Pay'},
     psNote:     {zh:'请妥善保存本工资单。', en:'Please keep this statement for your records.'},
+    /* default texts that stay editable (only replaced on language switch while still at their default) */
+    billToPh:   {zh:'家长 / 公司名称', en:'Parent / Company Name'},
+    empNamePh:  {zh:'员工姓名', en:'Employee Name'},
+    empAddrPh:  {zh:'地址（可选）', en:'Address (optional)'},
+    regularPay: {zh:'基本工资', en:'Regular Pay'},
+    monthly:    {zh:'月薪',     en:'Monthly'},
   };
   function curLang(){ return $('#lang').value || 'both'; }
-  function t(key){ const e = I18N[key]; const l = curLang(); return l === 'both' ? (e.zh + ' ' + e.en) : e[l]; }
+  function tt(e){ const l = curLang(); return l === 'both' ? (e.zh + ' ' + e.en) : e[l]; }
+  function t(key){ return tt(I18N[key]); }
+  // true if `text` is one of the ways this entry is rendered in any language (i.e. not user-customised)
+  function isDefaultText(text, e){
+    const s = (text || '').trim();
+    return [e.zh, e.en, e.zh + ' ' + e.en, e.en + ' ' + e.zh].includes(s);
+  }
   function applyLang(){
     document.querySelectorAll('[data-i18n]').forEach(el => {
       el.textContent = t(el.dataset.i18n) + (el.hasAttribute('data-colon') ? ':' : '');
     });
+    document.querySelectorAll('[data-i18n-default]').forEach(el => {
+      const e = I18N[el.dataset.i18nDefault];
+      if (isDefaultText(el.textContent, e)) el.textContent = tt(e);
+    });
+    document.querySelectorAll('#psDedBody tr[data-def]').forEach(tr => {
+      const d = PS_DEFAULT_DEDUCTIONS[+tr.dataset.def];
+      if (d) tr.querySelector('.desc').textContent = tt(d);
+    });
+    psRenderDates();
     document.querySelectorAll('.adlabel').forEach(el => el.textContent = t('amountDue'));
     document.querySelectorAll('.nplabel').forEach(el => el.textContent = t('netPay'));
     recalc();
@@ -566,7 +604,7 @@
     const el = $('#invNo');
     const m = el.textContent.match(/(\d+)\s*$/);
     if (m) el.textContent = el.textContent.replace(/\d+\s*$/, String(+m[1]+1).padStart(m[1].length,'0'));
-    $('.billto .name').textContent = '家长 / 公司名称';
+    $('.billto .name').textContent = t('billToPh');
     $('#invDate').textContent = todayLong();
     $('#dueDate').textContent = todayLong();
     $('#itemsBody').innerHTML = '';
@@ -579,7 +617,13 @@
   document.addEventListener('input', e => {
     if (e.target.closest('#itemsBody') || e.target.closest('.payrow') || ['taxRate','taxOn','currency'].includes(e.target.id)) recalc();
     if (e.target.closest('#psDedBody') || e.target.closest('#psHoursCell') || ['psAmount','currency'].includes(e.target.id)) psRecalc();
-    if (e.target.closest('#psDedBody')) psSave();
+    if (e.target.closest('#psDedBody')) {
+      // editing a default deduction's name turns it into a custom row (stops following the language switch)
+      const tr = e.target.closest('tr');
+      if (e.target.classList.contains('desc') && tr && tr.dataset.def != null && !isDefaultText(e.target.textContent, PS_DEFAULT_DEDUCTIONS[+tr.dataset.def])) delete tr.dataset.def;
+      psSave();
+    }
+    if (['psStart','psEnd','psPay'].includes(e.target.id)) psRenderDates();
     const saved = e.target.closest('[data-save]');
     if (saved && saved.dataset.nosave === undefined) {
       // The same field (e.g. company name) appears on several sheets: keep the copies in sync.
@@ -591,6 +635,8 @@
     if (['taxOn','currency'].includes(e.target.id)) { recalc(); psRecalc(); saveSettings(); }
     if (e.target.id === 'lang') { applyLang(); saveSettings(); }
     if (e.target.id === 'psMode') { psUpdateModeLabel(); psRecalc(); psSave(); }
+    if (e.target.id === 'psState') { psApplyState(); psSave(); }
+    if (['psStart','psEnd','psPay'].includes(e.target.id)) psRenderDates();
   });
 
   /* ---------- Tabs ---------- */
@@ -606,13 +652,28 @@
   /* ---------- Pay stub ---------- */
   const PS_KEY = 'paystubSettings_v1';
   // Defaults for a California employer. Federal / state income tax are flat effective-rate estimates; edit as needed.
+  // Rows without `state` are federal and apply everywhere; rows with `state` are swapped when the state changes.
+  // Keep the order stable: saved rows reference entries by index.
   const PS_DEFAULT_DEDUCTIONS = [
-    ['Federal Income Tax 联邦所得税', '10%'],
-    ['Social Security 社会保障税', '6.2%'],
-    ['Medicare 医疗保险税', '1.45%'],
-    ['CA State Income Tax 加州所得税', '4%'],
-    ['CA SDI 加州残障保险', '1.3%'],
+    {en:'Federal Income Tax',     zh:'联邦所得税',       basis:'10%'},
+    {en:'Social Security',        zh:'社会保障税',       basis:'6.2%'},
+    {en:'Medicare',               zh:'医疗保险税',       basis:'1.45%'},
+    {en:'CA State Income Tax',    zh:'加州所得税',       basis:'4%',    state:'CA'},
+    {en:'CA SDI',                 zh:'加州残障保险',     basis:'1.3%',  state:'CA'},
+    {en:'IN State Income Tax',    zh:'印第安纳州所得税', basis:'2.95%', state:'IN'},   // flat rate, 2026
+    {en:'IN County Income Tax',   zh:'印第安纳县所得税', basis:'1%',    state:'IN'},   // varies by county of residence
   ];
+  const psStateDefaults = st => PS_DEFAULT_DEDUCTIONS.map((d, i) => [d, i]).filter(([d]) => !d.state || d.state === st);
+  // Swap the state-level rows for the selected state; federal and custom rows are left untouched.
+  function psApplyState() {
+    const st = $('#psState').value;
+    document.querySelectorAll('#psDedBody tr[data-def]').forEach(tr => {
+      const d = PS_DEFAULT_DEDUCTIONS[+tr.dataset.def];
+      if (d && d.state) tr.remove();
+    });
+    psStateDefaults(st).filter(([d]) => d.state).forEach(([d, i]) => psAddDeduction('', d.basis, i));
+    psRecalc();
+  }
   const r2 = n => Math.round(n * 100) / 100;
   const sum = a => a.reduce((x, y) => x + y, 0);
 
@@ -623,8 +684,10 @@
     return s.includes('%') ? {pct: v} : {fixed: v};
   }
 
-  function psAddDeduction(name = '', basis = '0%') {
+  // def: index into PS_DEFAULT_DEDUCTIONS (name follows the language switch) or null for a custom row
+  function psAddDeduction(name = '', basis = '0%', def = null) {
     const tr = document.createElement('tr');
+    if (def != null) { tr.dataset.def = def; name = tt(PS_DEFAULT_DEDUCTIONS[def]); }
     tr.innerHTML =
       '<td class="desc" contenteditable>'+name+'</td>'+
       '<td class="qty basis" contenteditable>'+basis+'</td>'+
@@ -690,9 +753,12 @@
   function psSave() {
     const s = {
       mode: $('#psMode').value,
-      deductions: [...document.querySelectorAll('#psDedBody tr')].map(tr => [
-        tr.querySelector('.desc').innerHTML, tr.querySelector('.basis').textContent,
-      ]),
+      state: $('#psState').value,
+      deductions: [...document.querySelectorAll('#psDedBody tr')].map(tr => ({
+        def: tr.dataset.def != null ? +tr.dataset.def : null,
+        name: tr.querySelector('.desc').innerHTML,
+        basis: tr.querySelector('.basis').textContent,
+      })),
     };
     localStorage.setItem(PS_KEY, JSON.stringify(s));
   }
@@ -700,23 +766,42 @@
     let s = {};
     try { s = JSON.parse(localStorage.getItem(PS_KEY)) || {}; } catch(e){}
     if (s.mode) $('#psMode').value = s.mode;
-    (Array.isArray(s.deductions) && s.deductions.length ? s.deductions : PS_DEFAULT_DEDUCTIONS)
-      .forEach(([n, b]) => psAddDeduction(n, b));
+    if (s.state) $('#psState').value = s.state;
+    if (Array.isArray(s.deductions) && s.deductions.length) {
+      s.deductions.forEach(d => {
+        if (Array.isArray(d)) { // legacy [name, basis] format: recover the default it came from, if any
+          const idx = PS_DEFAULT_DEDUCTIONS.findIndex(x => isDefaultText(d[0], x));
+          psAddDeduction(d[0], d[1], idx >= 0 ? idx : null);
+        } else psAddDeduction(d.name, d.basis, d.def);
+      });
+    } else psStateDefaults($('#psState').value).forEach(([d, i]) => psAddDeduction('', d.basis, i));
     psUpdateModeLabel();
+  }
+
+  /* Dates come from the <input type=date> pickers in the panel and are rendered in the current language. */
+  const isoDate = d => d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0');
+  function parseIso(s){ const [y, m, d] = s.split('-').map(Number); return new Date(y, m-1, d); }
+  function psRenderDates() {
+    const f = id => { const v = $('#'+id).value; return v ? fmtDate(parseIso(v)) : ''; };
+    const a = f('psStart'), b = f('psEnd');
+    $('#psPeriod').textContent = a && b ? a + ' – ' + b : (a || b);
+    $('#psPayDate').textContent = f('psPay');
   }
   function psDefaultDates() {
     const now = new Date();
     const first = new Date(now.getFullYear(), now.getMonth(), 1);
-    $('#psPeriod').textContent = fmtDate(first) + ' – ' + fmtDate(now);
-    $('#psPayDate').textContent = fmtDate(now);
+    $('#psStart').value = isoDate(first);
+    $('#psEnd').value = isoDate(now);
+    $('#psPay').value = isoDate(now);
+    psRenderDates();
   }
   function resetPaystub() {
     if (!confirm('新建一张空白工资单？（公司信息、Logo 与扣除项设置会保留）')) return;
     const el = $('#psNo');
     const m = el.textContent.match(/(\d+)\s*$/);
     if (m) el.textContent = el.textContent.replace(/\d+\s*$/, String(+m[1]+1).padStart(m[1].length,'0'));
-    $('#psEmpName').textContent = '员工姓名';
-    $('#psEmpAddr').textContent = '地址（可选）';
+    $('#psEmpName').textContent = t('empNamePh');
+    $('#psEmpAddr').textContent = t('empAddrPh');
     $('#psAmount').value = '0';
     $('#psHoursCell').textContent = '';
     psDefaultDates();
