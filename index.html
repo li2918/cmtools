@@ -260,11 +260,15 @@
 
   <div class="ps-panel no-print">
     <div class="row">
-      <label>州 State
+      <label title="只控制州（及县）所得税；加州 SDI 由右侧勾选框单独控制">州所得税 State Tax
         <select class="inp" id="psState">
           <option value="CA">California 加州</option>
           <option value="IN">Indiana 印第安纳</option>
+          <option value="">不扣 None</option>
         </select>
+      </label>
+      <label title="加州残障保险，可与任一州所得税组合，例如在加州工作但按印第安纳州缴所得税">
+        <input type="checkbox" id="psSdi"> 加州 SDI
       </label>
       <label title="输入税前工资，自动算出扣除项与实发工资">税前工资 Gross Pay
         <input class="inp" id="psGrossIn" inputmode="decimal" value="0">
@@ -286,7 +290,7 @@
         <input type="date" class="inp" id="psPay">
       </label>
     </div>
-    <div class="ps-hint">扣除项在下方表格中直接编辑：比率列填 “6.2%” 表示按应发工资的百分比，填 “50” 表示固定金额。联邦 / 州所得税为预扣估算，请按实际有效税率填写。切换州时会替换州级扣除项，联邦项与自定义项保留。印第安纳州另有县税，税率因居住县不同（约 0.5%–3%），请按实际填写。</div>
+    <div class="ps-hint">扣除项在下方表格中直接编辑：比率列填 “6.2%” 表示按应发工资的百分比，填 “50” 表示固定金额。联邦 / 州所得税为预扣估算，请按实际有效税率填写。切换州所得税时只替换州 / 县所得税行，联邦项、加州 SDI 与自定义项保留。印第安纳州另有县税，税率因居住县不同（约 0.5%–3%），请按实际填写。</div>
     <div class="ps-warn" id="psWarn" style="display:none">百分比扣除合计已达到或超过 100%，无法反推应发工资。</div>
   </div>
 
@@ -643,6 +647,7 @@
     if (e.target.id === 'lang') { applyLang(); saveSettings(); }
     if (e.target.id === 'psState') { psApplyState(); psSave(); }
     if (e.target.id === 'psNoFed') { psApplyNoFed(); psSave(); }
+    if (e.target.id === 'psSdi') { psApplySdi(); psSave(); }
     if (['psStart','psEnd','psPay'].includes(e.target.id)) psRenderDates();
   });
 
@@ -659,26 +664,44 @@
   /* ---------- Pay stub ---------- */
   const PS_KEY = 'paystubSettings_v1';
   // Defaults for a California employer. Federal / state income tax are flat effective-rate estimates; edit as needed.
-  // Rows without `state` are federal and apply everywhere; rows with `state` are swapped when the state changes.
-  // Keep the order stable: saved rows reference entries by index.
+  // Rows without `state`/`sdi` are federal and apply everywhere. Rows with `state` are the state (and county)
+  // income taxes swapped by the State Tax selector. CA SDI is toggled independently (an employee can work in
+  // California and owe SDI while paying income tax to another state). Keep the order stable: saved rows
+  // reference entries by index.
   const PS_DEFAULT_DEDUCTIONS = [
     {en:'Federal Income Tax',     zh:'联邦所得税',       basis:'10%'},
     {en:'Social Security',        zh:'社会保障税',       basis:'6.2%'},
     {en:'Medicare',               zh:'医疗保险税',       basis:'1.45%'},
     {en:'CA State Income Tax',    zh:'加州所得税',       basis:'4%',    state:'CA'},
-    {en:'CA SDI',                 zh:'加州残障保险',     basis:'1.3%',  state:'CA'},
+    {en:'CA SDI',                 zh:'加州残障保险',     basis:'1.3%',  sdi:true},
     {en:'IN State Income Tax',    zh:'印第安纳州所得税', basis:'2.95%', state:'IN'},   // flat rate, 2026
     {en:'IN County Income Tax',   zh:'印第安纳县所得税', basis:'1%',    state:'IN'},   // varies by county of residence
   ];
-  const psStateDefaults = st => PS_DEFAULT_DEDUCTIONS.map((d, i) => [d, i]).filter(([d]) => !d.state || d.state === st);
-  // Swap the state-level rows for the selected state; federal and custom rows are left untouched.
+  const PS_FED = 0, PS_SDI = 4; // indexes of the rows the toggles control
+  // Fresh-install row set for a state: federal rows, that state's income tax rows, and SDI only for California.
+  const psStateDefaults = st => PS_DEFAULT_DEDUCTIONS.map((d, i) => [d, i])
+    .filter(([d]) => (!d.state && !d.sdi) || d.state === st || (d.sdi && st === 'CA'));
+  // Swap the state income tax rows for the selected state; federal, SDI and custom rows are left untouched.
   function psApplyState() {
     const st = $('#psState').value;
     document.querySelectorAll('#psDedBody tr[data-def]').forEach(tr => {
       const d = PS_DEFAULT_DEDUCTIONS[+tr.dataset.def];
       if (d && d.state) tr.remove();
     });
-    psStateDefaults(st).filter(([d]) => d.state).forEach(([d, i]) => psAddDeduction('', d.basis, i));
+    const sdiRow = $('#psDedBody tr[data-def="'+PS_SDI+'"]');
+    psStateDefaults(st).filter(([d]) => d.state).forEach(([d, i]) => {
+      const tr = psAddDeduction('', d.basis, i);
+      if (sdiRow) sdiRow.before(tr); // keep state tax above SDI
+    });
+    psRecalc();
+  }
+  /* CA SDI toggle: adds / removes the SDI row, remembering its rate. */
+  let psSdiBasis = null;
+  function psApplySdi() {
+    const on = $('#psSdi').checked;
+    const rows = document.querySelectorAll('#psDedBody tr[data-def="'+PS_SDI+'"]');
+    if (!on) rows.forEach(tr => { psSdiBasis = tr.querySelector('.basis').textContent; tr.remove(); });
+    else if (!rows.length) psAddDeduction('', psSdiBasis || PS_DEFAULT_DEDUCTIONS[PS_SDI].basis, PS_SDI);
     psRecalc();
   }
   const r2 = n => Math.round(n * 100) / 100;
@@ -707,7 +730,6 @@
   }
 
   /* "No federal income tax" toggle: removes the federal row, remembering its rate so unchecking restores it. */
-  const PS_FED = 0; // index of Federal Income Tax in PS_DEFAULT_DEDUCTIONS
   let psFedBasis = null;
   function psApplyNoFed() {
     const off = $('#psNoFed').checked;
@@ -782,6 +804,7 @@
       state: $('#psState').value,
       noFed: $('#psNoFed').checked,
       fedBasis: psFedBasis,
+      sdiBasis: psSdiBasis,
       deductions: [...document.querySelectorAll('#psDedBody tr')].map(tr => ({
         def: tr.dataset.def != null ? +tr.dataset.def : null,
         name: tr.querySelector('.desc').innerHTML,
@@ -794,7 +817,7 @@
     let s = {};
     try { s = JSON.parse(localStorage.getItem(PS_KEY)) || {}; } catch(e){}
     if (s.mode === 'gross' || s.mode === 'net') psMode = s.mode;
-    if (s.state) $('#psState').value = s.state;
+    if (typeof s.state === 'string') $('#psState').value = s.state; // '' = no state income tax
     if (Array.isArray(s.deductions) && s.deductions.length) {
       s.deductions.forEach(d => {
         if (Array.isArray(d)) { // legacy [name, basis] format: recover the default it came from, if any
@@ -804,8 +827,11 @@
       });
     } else psStateDefaults($('#psState').value).forEach(([d, i]) => psAddDeduction('', d.basis, i));
     if (s.fedBasis) psFedBasis = s.fedBasis;
+    if (s.sdiBasis) psSdiBasis = s.sdiBasis;
     $('#psNoFed').checked = !!s.noFed;
     if (s.noFed) psApplyNoFed();
+    // the SDI checkbox reflects whether the SDI row is actually present
+    $('#psSdi').checked = !!$('#psDedBody tr[data-def="'+PS_SDI+'"]');
   }
 
   /* Dates come from the <input type=date> pickers in the panel and are rendered in the current language. */
