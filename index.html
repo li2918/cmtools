@@ -120,6 +120,9 @@
   .ps-panel label { display: flex; align-items: center; gap: 6px; color: #555; }
   .ps-panel input.inp { width: 130px; font-weight: 600; font-size: 15px; }
   .ps-panel input[type=date].inp { width: auto; font-weight: 400; font-size: 13px; }
+  .ps-panel input.inp.active { background: #e8f7ee; border-color: #9fd6b4; }
+  .ps-panel input.inp.derived { background: #f3f4f6; color: #555; font-weight: 400; }
+  .ps-arrow { color: var(--muted); font-size: 12px; }
   .ps-panel .row + .row { margin-top: 8px; }
   .ps-hint { color: var(--muted); font-size: 12px; margin-top: 8px; line-height: 1.5; }
   .ps-warn { color: #c0392b; font-size: 12px; margin-top: 6px; font-weight: 600; }
@@ -263,14 +266,15 @@
           <option value="IN">Indiana 印第安纳</option>
         </select>
       </label>
-      <label>计算方式
-        <select class="inp" id="psMode">
-          <option value="net">反推：输入实发工资，推算应发与扣除</option>
-          <option value="gross">正算：输入应发工资，计算扣除与实发</option>
-        </select>
+      <label title="输入税前工资，自动算出扣除项与实发工资">税前工资 Gross Pay
+        <input class="inp" id="psGrossIn" inputmode="decimal" value="0">
       </label>
-      <label><span id="psAmountLabel">实发工资 Net Pay</span>
-        <input class="inp" id="psAmount" inputmode="decimal" value="0">
+      <label title="输入实发工资，反推税前工资与扣除项">实发工资 Net Pay
+        <input class="inp" id="psNetIn" inputmode="decimal" value="0">
+      </label>
+      <span class="ps-arrow" id="psModeTip">在任一框输入，另一框自动推算</span>
+      <label title="勾选后工资单中不出现联邦所得税这一行；取消勾选会恢复，并保留之前填写的税率">
+        <input type="checkbox" id="psNoFed"> 不扣联邦所得税 No Federal Income Tax
       </label>
     </div>
     <div class="row">
@@ -616,7 +620,10 @@
   /* ---------- Events ---------- */
   document.addEventListener('input', e => {
     if (e.target.closest('#itemsBody') || e.target.closest('.payrow') || ['taxRate','taxOn','currency'].includes(e.target.id)) recalc();
-    if (e.target.closest('#psDedBody') || e.target.closest('#psHoursCell') || ['psAmount','currency'].includes(e.target.id)) psRecalc();
+    if (e.target.id === 'psGrossIn') psMode = 'gross';
+    if (e.target.id === 'psNetIn') psMode = 'net';
+    if (e.target.closest('#psDedBody') || e.target.closest('#psHoursCell') || ['psGrossIn','psNetIn','currency'].includes(e.target.id)) psRecalc();
+    if (['psGrossIn','psNetIn'].includes(e.target.id)) psSave();
     if (e.target.closest('#psDedBody')) {
       // editing a default deduction's name turns it into a custom row (stops following the language switch)
       const tr = e.target.closest('tr');
@@ -634,8 +641,8 @@
   document.addEventListener('change', e => {
     if (['taxOn','currency'].includes(e.target.id)) { recalc(); psRecalc(); saveSettings(); }
     if (e.target.id === 'lang') { applyLang(); saveSettings(); }
-    if (e.target.id === 'psMode') { psUpdateModeLabel(); psRecalc(); psSave(); }
     if (e.target.id === 'psState') { psApplyState(); psSave(); }
+    if (e.target.id === 'psNoFed') { psApplyNoFed(); psSave(); }
     if (['psStart','psEnd','psPay'].includes(e.target.id)) psRenderDates();
   });
 
@@ -696,15 +703,29 @@
     $('#psDedBody').appendChild(tr);
     tr.querySelector('.del-row').onclick = () => { tr.remove(); psRecalc(); psSave(); };
     psRecalc();
+    return tr;
   }
 
-  function psUpdateModeLabel() {
-    $('#psAmountLabel').textContent = $('#psMode').value === 'gross' ? '应发工资 Gross Pay' : '实发工资 Net Pay';
+  /* "No federal income tax" toggle: removes the federal row, remembering its rate so unchecking restores it. */
+  const PS_FED = 0; // index of Federal Income Tax in PS_DEFAULT_DEDUCTIONS
+  let psFedBasis = null;
+  function psApplyNoFed() {
+    const off = $('#psNoFed').checked;
+    const rows = document.querySelectorAll('#psDedBody tr[data-def="'+PS_FED+'"]');
+    if (off) {
+      rows.forEach(tr => { psFedBasis = tr.querySelector('.basis').textContent; tr.remove(); });
+    } else if (!rows.length) {
+      const tr = psAddDeduction('', psFedBasis || PS_DEFAULT_DEDUCTIONS[PS_FED].basis, PS_FED);
+      $('#psDedBody').prepend(tr); // federal tax goes first
+    }
+    psRecalc();
   }
 
+  // Which box the user typed in last: 'net' → reverse (net → gross), 'gross' → forward (gross → net)
+  let psMode = 'net';
   function psRecalc() {
-    const mode = $('#psMode').value;
-    const input = r2(num($('#psAmount').value));
+    const mode = psMode;
+    const input = r2(num($(mode === 'gross' ? '#psGrossIn' : '#psNetIn').value));
     const rows = [...document.querySelectorAll('#psDedBody tr')].map(tr => ({tr, ...parseBasis(tr.querySelector('.basis').textContent)}));
     const pctSum = sum(rows.map(r => r.pct || 0));
     const fixedSum = sum(rows.map(r => r.fixed || 0));
@@ -739,6 +760,11 @@
     }
 
     rows.forEach((r, i) => r.tr.querySelector('.amount').textContent = money(amounts[i]));
+    // fill the derived box and mark which one drives the calculation
+    const gIn = $('#psGrossIn'), nIn = $('#psNetIn');
+    if (mode === 'gross') nIn.value = net.toFixed(2); else gIn.value = gross.toFixed(2);
+    gIn.classList.toggle('active', mode === 'gross'); gIn.classList.toggle('derived', mode !== 'gross');
+    nIn.classList.toggle('active', mode === 'net');   nIn.classList.toggle('derived', mode !== 'net');
     const hours = num($('#psHoursCell').textContent);
     $('#psRateCell').textContent = hours > 0 ? money(gross / hours) : '—';
     $('#psGrossCell').textContent = money(gross);
@@ -752,8 +778,10 @@
 
   function psSave() {
     const s = {
-      mode: $('#psMode').value,
+      mode: psMode,
       state: $('#psState').value,
+      noFed: $('#psNoFed').checked,
+      fedBasis: psFedBasis,
       deductions: [...document.querySelectorAll('#psDedBody tr')].map(tr => ({
         def: tr.dataset.def != null ? +tr.dataset.def : null,
         name: tr.querySelector('.desc').innerHTML,
@@ -765,7 +793,7 @@
   function psLoad() {
     let s = {};
     try { s = JSON.parse(localStorage.getItem(PS_KEY)) || {}; } catch(e){}
-    if (s.mode) $('#psMode').value = s.mode;
+    if (s.mode === 'gross' || s.mode === 'net') psMode = s.mode;
     if (s.state) $('#psState').value = s.state;
     if (Array.isArray(s.deductions) && s.deductions.length) {
       s.deductions.forEach(d => {
@@ -775,7 +803,9 @@
         } else psAddDeduction(d.name, d.basis, d.def);
       });
     } else psStateDefaults($('#psState').value).forEach(([d, i]) => psAddDeduction('', d.basis, i));
-    psUpdateModeLabel();
+    if (s.fedBasis) psFedBasis = s.fedBasis;
+    $('#psNoFed').checked = !!s.noFed;
+    if (s.noFed) psApplyNoFed();
   }
 
   /* Dates come from the <input type=date> pickers in the panel and are rendered in the current language. */
@@ -802,7 +832,8 @@
     if (m) el.textContent = el.textContent.replace(/\d+\s*$/, String(+m[1]+1).padStart(m[1].length,'0'));
     $('#psEmpName').textContent = t('empNamePh');
     $('#psEmpAddr').textContent = t('empAddrPh');
-    $('#psAmount').value = '0';
+    $('#psGrossIn').value = '0';
+    $('#psNetIn').value = '0';
     $('#psHoursCell').textContent = '';
     psDefaultDates();
     psRecalc();
